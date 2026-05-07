@@ -15,7 +15,7 @@ import (
 
 func TestClient(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	mockHttpClient := mock_ygoapi.NewMockHttpClient(ctrl)
+	mockHTTPClient := mock_ygoapi.NewMockHTTPClient(ctrl)
 
 	testBaseURL := "http://mybaseurl.com"
 	expectedRequest, err := http.NewRequest(http.MethodGet, testBaseURL, nil)
@@ -39,11 +39,11 @@ func TestClient(t *testing.T) {
 	jsonBytes, err := json.Marshal(expectedResponse)
 	require.NoError(t, err)
 
-	mockHttpClient.EXPECT().Do(expectedRequest).Return(&http.Response{
+	mockHTTPClient.EXPECT().Do(expectedRequest).Return(&http.Response{
 		Body: io.NopCloser(bytes.NewBuffer(jsonBytes)),
 	}, nil)
 
-	client := ygoapi.NewClient(testBaseURL, mockHttpClient)
+	client := ygoapi.NewClient(testBaseURL, mockHTTPClient)
 	response, err := client.GetCards()
 	require.NoError(t, err)
 	require.Equal(t, expectedResponse, response)

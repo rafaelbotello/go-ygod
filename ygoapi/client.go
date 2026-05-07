@@ -10,16 +10,16 @@ import (
 
 const BaseURL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
 
-type HttpClient interface {
+type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
 type Client struct {
 	BaseURL    string
-	httpClient HttpClient
+	httpClient HTTPClient
 }
 
-func NewClient(BaseURL string, httpClient HttpClient) *Client {
+func NewClient(BaseURL string, httpClient HTTPClient) *Client {
 	return &Client{
 		BaseURL:    BaseURL,
 		httpClient: httpClient,
