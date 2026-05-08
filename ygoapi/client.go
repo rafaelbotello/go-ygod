@@ -3,6 +3,7 @@
 package ygoapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -41,8 +42,9 @@ type GetCardsResponse struct {
 	Data []Card `json:"data"`
 }
 
-func (c *Client) GetCards() (*GetCardsResponse, error) {
-	req, err := http.NewRequest("GET", c.BaseURL, nil)
+func (c *Client) GetCards(ctx context.Context) (*GetCardsResponse, error) {
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Card request: %w", err)
 	}
@@ -50,6 +52,11 @@ func (c *Client) GetCards() (*GetCardsResponse, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to submit Cards http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	var response *GetCardsResponse

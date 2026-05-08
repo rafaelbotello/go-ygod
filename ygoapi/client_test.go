@@ -2,7 +2,9 @@ package ygoapi_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -18,7 +20,8 @@ func TestClient(t *testing.T) {
 	mockHTTPClient := mock_ygoapi.NewMockHTTPClient(ctrl)
 
 	testBaseURL := "http://mybaseurl.com"
-	expectedRequest, err := http.NewRequest(http.MethodGet, testBaseURL, nil)
+
+	_, err := http.NewRequest(http.MethodGet, testBaseURL, nil)
 	require.NoError(t, err)
 
 	expectedResponse := &ygoapi.GetCardsResponse{
@@ -39,13 +42,56 @@ func TestClient(t *testing.T) {
 	jsonBytes, err := json.Marshal(expectedResponse)
 	require.NoError(t, err)
 
-	mockHTTPClient.EXPECT().Do(expectedRequest).Return(&http.Response{
-		Body: io.NopCloser(bytes.NewBuffer(jsonBytes)),
-	}, nil)
-
 	client := ygoapi.NewClient(testBaseURL, mockHTTPClient)
-	response, err := client.GetCards()
-	require.NoError(t, err)
-	require.Equal(t, expectedResponse, response)
+
+	t.Run("Success Download", func(t *testing.T) {
+
+		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBuffer(jsonBytes)),
+		}, nil)
+
+		response, err := client.GetCards(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, expectedResponse, response)
+
+	})
+
+	t.Run("Fails on 429", func(t *testing.T) {
+
+		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body:       io.NopCloser(bytes.NewBuffer(jsonBytes)),
+		}, nil)
+
+		_, err := client.GetCards(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "429")
+	})
+
+	t.Run("Fails on 500", func(t *testing.T) {
+
+		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       io.NopCloser(bytes.NewBufferString("Server crashed")),
+		}, nil)
+
+		_, err := client.GetCards(context.Background())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "500")
+	})
+
+	t.Run("Fails on Timeout", func(t *testing.T) {
+
+		timeoutErr := errors.New("network timeout")
+
+		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(nil, timeoutErr)
+
+		_, err := client.GetCards(context.Background())
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to submit Cards http request")
+		require.Contains(t, err.Error(), "network timeout")
+	})
 
 }
