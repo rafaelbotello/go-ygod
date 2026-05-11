@@ -5,14 +5,16 @@ package ygoapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 )
 
 const BaseURL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
+
+var ErrFatalAPI = errors.New("fatal API error (rate limit or forbidden)")
 
 type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
@@ -71,11 +73,6 @@ func (c *Client) GetCards(ctx context.Context) (*GetCardsResponse, error) {
 
 func (c *Client) DownloadImage(ctx context.Context, url string, dest string) error {
 
-	err := os.MkdirAll("images/", 0755)
-	if err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create Image request: %w", err)
@@ -83,17 +80,19 @@ func (c *Client) DownloadImage(ctx context.Context, url string, dest string) err
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		fmt.Printf("error fetching image: %v\n", err)
+		return fmt.Errorf("error fetching image: %v", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("%w: received status %d", ErrFatalAPI, resp.StatusCode)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	const mode fs.FileMode = 0644
-
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY, mode)
+	out, err := os.Create(dest)
 	if err != nil {
 		return fmt.Errorf("failed to save Image: %w", err)
 	}

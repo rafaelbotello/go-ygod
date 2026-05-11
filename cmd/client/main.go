@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
-
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/rafaelbotello/go-ygod/ygoapi"
 )
@@ -23,6 +23,11 @@ func main() {
 	response, err := client.GetCards(ctx)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	err = os.MkdirAll("images/", 0755)
+	if err != nil {
+		log.Fatalf("failed to create directory: %w", err)
 	}
 
 	for i, card := range response.Data {
