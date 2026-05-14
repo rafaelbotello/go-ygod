@@ -16,19 +16,19 @@ const BaseURL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
 
 var ErrFatalAPI = errors.New("fatal API error (rate limit or forbidden)")
 
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 type Client struct {
-	BaseURL    string
-	httpClient HTTPClient
+	baseURL string
+	client  *http.Client
 }
 
-func NewClient(BaseURL string, httpClient HTTPClient) *Client {
+func NewClient(baseURL string, client *http.Client) *Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+
 	return &Client{
-		BaseURL:    BaseURL,
-		httpClient: httpClient,
+		baseURL: baseURL,
+		client:  client,
 	}
 }
 
@@ -49,14 +49,14 @@ type GetCardsResponse struct {
 
 func (c *Client) GetCards(ctx context.Context) (*GetCardsResponse, error) {
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Card request: %w", err)
+		return nil, fmt.Errorf("failed to create cards request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to submit Cards http request: %w", err)
+		return nil, fmt.Errorf("failed to execute cards request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -64,11 +64,12 @@ func (c *Client) GetCards(ctx context.Context) (*GetCardsResponse, error) {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var response *GetCardsResponse
+	var response GetCardsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal Cards http request: %w", err)
+		return nil, fmt.Errorf("failed to decode cards response: %w", err)
 	}
-	return response, nil
+
+	return &response, nil
 }
 
 func (c *Client) DownloadImage(ctx context.Context, url string, dest string) error {
@@ -78,7 +79,7 @@ func (c *Client) DownloadImage(ctx context.Context, url string, dest string) err
 		return fmt.Errorf("failed to create Image request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("error fetching image: %v", err)
 	}
@@ -98,6 +99,9 @@ func (c *Client) DownloadImage(ctx context.Context, url string, dest string) err
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
-	return err
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		return fmt.Errorf("failed to save image data: %w", err)
+	}
+
+	return nil
 }

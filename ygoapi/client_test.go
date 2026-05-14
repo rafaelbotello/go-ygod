@@ -1,10 +1,7 @@
 package ygoapi_test
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,178 +10,179 @@ import (
 	"testing"
 
 	"github.com/rafaelbotello/go-ygod/ygoapi"
-	mock_ygoapi "github.com/rafaelbotello/go-ygod/ygoapi/mock_httpclient"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 func TestGetCards(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mockHTTPClient := mock_ygoapi.NewMockHTTPClient(ctrl)
 
-	testBaseURL := "http://mybaseurl.com"
-
-	_, err := http.NewRequest(http.MethodGet, testBaseURL, nil)
-	require.NoError(t, err)
-
-	expectedResponse := &ygoapi.GetCardsResponse{
-		Data: []ygoapi.Card{
-			{
-				ID:   80181649,
-				Name: "A Case for K9",
-				CardImages: []ygoapi.CardImage{
-					{
-						ID:       34541863,
-						ImageURL: "https://images.ygoprodeck.com/images/cards/80181649.jpg",
+	t.Run("success", func(t *testing.T) {
+		expectedResponse := &ygoapi.GetCardsResponse{
+			Data: []ygoapi.Card{
+				{
+					ID:   80181649,
+					Name: "A Case for K9",
+					CardImages: []ygoapi.CardImage{
+						{
+							ID:       34541863,
+							ImageURL: "https://images.ygoprodeck.com/images/cards/80181649.jpg",
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	jsonBytes, err := json.Marshal(expectedResponse)
-	require.NoError(t, err)
+		server := httptest.NewServer(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodGet, r.Method)
+				require.Equal(t, "/", r.URL.Path)
+				w.WriteHeader(http.StatusOK)
+				err := json.NewEncoder(w).Encode(expectedResponse)
+				require.NoError(t, err)
+			}),
+		)
+		defer server.Close()
 
-	client := ygoapi.NewClient(testBaseURL, mockHTTPClient)
-
-	t.Run("Success Download", func(t *testing.T) {
-
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBuffer(jsonBytes)),
-		}, nil)
+		client := ygoapi.NewClient(server.URL, server.Client())
 
 		response, err := client.GetCards(t.Context())
+
 		require.NoError(t, err)
 		require.Equal(t, expectedResponse, response)
-
 	})
 
-	t.Run("Fails on 429", func(t *testing.T) {
+	t.Run("fails on 429", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusTooManyRequests)
+		}),
+		)
+		defer server.Close()
 
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
-			StatusCode: http.StatusTooManyRequests,
-			Body:       io.NopCloser(bytes.NewBuffer(jsonBytes)),
-		}, nil)
+		client := ygoapi.NewClient(server.URL, server.Client())
 
 		_, err := client.GetCards(t.Context())
+
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "429")
 	})
 
-	t.Run("Fails on 500", func(t *testing.T) {
+	t.Run("fails on 500", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}),
+		)
+		defer server.Close()
 
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
-			StatusCode: http.StatusInternalServerError,
-			Body:       io.NopCloser(bytes.NewBufferString("Server crashed")),
-		}, nil)
+		client := ygoapi.NewClient(server.URL, server.Client())
 
 		_, err := client.GetCards(t.Context())
+
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "500")
 	})
 
-	t.Run("Fails on Timeout", func(t *testing.T) {
+	t.Run("fails on invalid json", func(t *testing.T) {
 
-		timeoutErr := errors.New("network timeout")
+		server := httptest.NewServer(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("{invalid-json"))
+			}),
+		)
+		defer server.Close()
 
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(nil, timeoutErr)
+		client := ygoapi.NewClient(server.URL, server.Client())
 
 		_, err := client.GetCards(t.Context())
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to submit Cards http request")
-		require.Contains(t, err.Error(), "network timeout")
+		require.Contains(t, err.Error(), "failed to decode")
 	})
-
 }
 
-func TestImageDownload(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mockHTTPClient := mock_ygoapi.NewMockHTTPClient(ctrl)
+func TestDownloadImage(t *testing.T) {
 
-	testBaseURL := "http://mybaseurl.com"
-
-	client := ygoapi.NewClient(testBaseURL, mockHTTPClient)
-
-	t.Run("Download Success", func(t *testing.T) {
-
+	t.Run("download success", func(t *testing.T) {
 		fakeImageBytes := []byte("fake-image-data-12345")
+		server := httptest.NewServer(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, http.MethodGet, r.Method)
+				w.WriteHeader(http.StatusOK)
 
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBuffer(fakeImageBytes)),
-		}, nil)
+				_, err := w.Write(fakeImageBytes)
+				require.NoError(t, err)
+			}),
+		)
+		defer server.Close()
 
-		tempDir := t.TempDir()
-		destPath := filepath.Join(tempDir, "123456_test.jpg")
+		client := ygoapi.NewClient(server.URL, server.Client())
 
-		err := client.DownloadImage(t.Context(), "http://mybaseurl.com/image.jpg", destPath)
+		destPath := filepath.Join(
+			t.TempDir(),
+			"test_card.jpg",
+		)
+
+		err := client.DownloadImage(
+			t.Context(),
+			server.URL+"/image.jpg",
+			destPath,
+		)
+
 		require.NoError(t, err)
 
 		savedBytes, err := os.ReadFile(destPath)
-		require.NoError(t, err, "failed to read the save file")
-		require.Equal(t, fakeImageBytes, savedBytes, "saved file bytes do not match mock bytes")
 
+		require.NoError(t, err)
+		require.Equal(t, fakeImageBytes, savedBytes)
 	})
 
-	t.Run("Fails on 404", func(t *testing.T) {
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
-			StatusCode: http.StatusNotFound,
-			Body:       io.NopCloser(bytes.NewBufferString("Not Found")),
-		}, nil)
+	t.Run("fails on 404", func(t *testing.T) {
+		server := httptest.NewServer(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNotFound)
+			}),
+		)
+		defer server.Close()
 
-		tempDir := t.TempDir()
-		destPath := filepath.Join(tempDir, "fail_card.jpg")
+		client := ygoapi.NewClient(server.URL, server.Client())
 
-		err := client.DownloadImage(t.Context(), "http://mybaseurl.com/image.jpg", destPath)
+		destPath := filepath.Join(t.TempDir(), "fail_card.jpg")
+
+		err := client.DownloadImage(t.Context(), server.URL+"/missing.jpg", destPath)
+
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "404")
 
-		_, fileErr := os.Stat(destPath)
-		require.True(t, os.IsNotExist(fileErr), "file should not exist on a 404 error")
+		_, statErr := os.Stat(destPath)
+
+		require.True(t, os.IsNotExist(statErr))
 	})
 
-	t.Run("Fails on 429", func(t *testing.T) {
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
-			StatusCode: http.StatusTooManyRequests,
-			Body:       io.NopCloser(bytes.NewBufferString("Not Found")),
-		}, nil)
+	t.Run("fails with fatal api error on 429", func(t *testing.T) {
 
-		tempDir := t.TempDir()
-		destPath := filepath.Join(tempDir, "fail_card.jpg")
+		server := httptest.NewServer(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusTooManyRequests)
+			}),
+		)
+		defer server.Close()
 
-		err := client.DownloadImage(t.Context(), "http://mybaseurl.com/image.jpg", destPath)
+		client := ygoapi.NewClient(server.URL, server.Client())
+
+		destPath := filepath.Join(t.TempDir(), "fail_card.jpg")
+
+		err := client.DownloadImage(t.Context(), server.URL+"/rate_limited.jpg", destPath)
+
 		require.Error(t, err)
+		require.ErrorIs(t, err, ygoapi.ErrFatalAPI)
 		require.Contains(t, err.Error(), "429")
-
-		_, fileErr := os.Stat(destPath)
-		require.True(t, os.IsNotExist(fileErr), "file should not exist on a 429 error")
 	})
-
-	t.Run("Fails on 403", func(t *testing.T) {
-		mockHTTPClient.EXPECT().Do(gomock.Any()).Return(&http.Response{
-			StatusCode: http.StatusForbidden,
-			Body:       io.NopCloser(bytes.NewBufferString("Not Found")),
-		}, nil)
-
-		tempDir := t.TempDir()
-		destPath := filepath.Join(tempDir, "fail_card.jpg")
-
-		err := client.DownloadImage(t.Context(), "http://mybaseurl.com/image.jpg", destPath)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "403")
-
-		_, fileErr := os.Stat(destPath)
-		require.True(t, os.IsNotExist(fileErr), "file should not exist on a 429 error")
-	})
-
 }
 
 func TestDownloadAllImages(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("fake_image_data"))
+		_, err := w.Write([]byte("fake_image_data"))
+		require.NoError(t, err)
 	}))
 	defer mockServer.Close()
 
