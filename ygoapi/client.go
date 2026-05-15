@@ -14,7 +14,7 @@ import (
 
 const BaseURL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
 
-var ErrFatalAPI = errors.New("fatal API error (rate limit or forbidden)")
+var ErrRateLimitExceeded = errors.New("fatal API error (rate limit or forbidden)")
 
 type Client struct {
 	baseURL string
@@ -86,7 +86,7 @@ func (c *Client) DownloadImage(ctx context.Context, url string, dest string) err
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("%w: received status %d", ErrFatalAPI, resp.StatusCode)
+		return fmt.Errorf("%w: received status %d", ErrRateLimitExceeded, resp.StatusCode)
 	}
 
 	if resp.StatusCode != http.StatusOK {

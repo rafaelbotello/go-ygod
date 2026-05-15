@@ -7,16 +7,15 @@ import (
 	"path/filepath"
 )
 
-func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string, cancel context.CancelFunc) {
+func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string) error {
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case job, ok := <-jobs:
-
 			if !ok {
-				return
+				return nil
 			}
 
 			fileName := filepath.Base(job)
@@ -24,14 +23,12 @@ func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string, ca
 
 			err := c.DownloadImage(ctx, job, destPath)
 			if err != nil {
-				if errors.Is(err, ErrFatalAPI) {
-					cancel()
-					return
+				if errors.Is(err, ErrRateLimitExceeded) {
+					return err
 				} else {
 					log.Printf("error downloading image %s: %v", fileName, err)
 				}
 			}
 		}
-
 	}
 }

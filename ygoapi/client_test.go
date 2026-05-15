@@ -173,7 +173,7 @@ func TestDownloadImage(t *testing.T) {
 		err := client.DownloadImage(t.Context(), server.URL+"/rate_limited.jpg", destPath)
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, ygoapi.ErrFatalAPI)
+		require.ErrorIs(t, err, ygoapi.ErrRateLimitExceeded)
 		require.Contains(t, err.Error(), "429")
 	})
 }

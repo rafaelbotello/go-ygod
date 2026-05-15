@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -36,7 +37,13 @@ func main() {
 
 	log.Printf("Starting download of %d images...", len(urls))
 
-	client.DownloadAllImages(ctx, urls, "images/", 4)
+	err = client.DownloadAllImages(ctx, urls, "images/", 4)
+	if err != nil {
+		if errors.Is(err, ygoapi.ErrRateLimitExceeded) {
+			log.Fatalf("Factory shut down early due to API Rate Limiting: %v", err)
+		}
+		log.Fatalf("Factory shut down with error: %v", err)
+	}
 
 	log.Println("All downloads complete! The factory is closed.")
 

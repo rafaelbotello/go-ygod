@@ -2,32 +2,35 @@ package ygoapi
 
 import (
 	"context"
-	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) DownloadAllImages(ctx context.Context, urls []string, destDir string, workerCount int) {
+func (c *Client) DownloadAllImages(ctx context.Context, urls []string, destDir string, workerCount int) error {
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	g, ctx := errgroup.WithContext(ctx)
 
 	jobs := make(chan string, workerCount)
 
-	var wg sync.WaitGroup
+	g.Go(func() error {
+		defer close(jobs)
+
+		for _, url := range urls {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case jobs <- url:
+			}
+		}
+
+		return nil
+	})
 
 	for range workerCount {
-		wg.Go(func() {
-			c.worker(ctx, jobs, destDir, cancel)
+		g.Go(func() error {
+			return c.worker(ctx, jobs, destDir)
 		})
 	}
 
-	for _, url := range urls {
-		if ctx.Err() != nil {
-			break
-		}
-		jobs <- url
-	}
-
-	close(jobs)
-
-	wg.Wait()
+	return g.Wait()
 }
