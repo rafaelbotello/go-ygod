@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/rafaelbotello/go-ygod/ygoapi"
 	"github.com/stretchr/testify/require"
@@ -240,4 +241,32 @@ func TestDownloadAllImages_RateLimitCancellation(t *testing.T) {
 	}
 
 	t.Logf("Success! The panic button worked. Workers stopped after only %d requests instead of 50.", finalCount)
+}
+
+func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := ygoapi.NewClient(server.URL, server.Client())
+	destDir := t.TempDir()
+
+	var urls []string
+	for range 45 {
+		urls = append(urls, server.URL+"/test.jpg")
+	}
+
+	startTime := time.Now()
+
+	err := client.DownloadAllImages(t.Context(), urls, destDir, 20)
+	require.NoError(t, err)
+
+	elapsed := time.Since(startTime)
+
+	if elapsed < 1500*time.Millisecond {
+		t.Fatalf("Rate limiter failed downloaded 45 images way too fast: %v", elapsed)
+	}
+
+	t.Logf("Success: rate limiter properly paced 45 requests over %v", elapsed)
 }
