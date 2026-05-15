@@ -196,7 +196,7 @@ func TestDownloadAllImages(t *testing.T) {
 		mockServer.URL + "/card4.jpg",
 	}
 
-	client.DownloadAllImages(t.Context(), urls, destDir, 2)
+	client.DownloadAllImages(t.Context(), urls, destDir, 15)
 
 	files, err := os.ReadDir(destDir)
 	if err != nil {

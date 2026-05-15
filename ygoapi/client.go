@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+
+	"golang.org/x/time/rate"
 )
 
 const BaseURL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
@@ -19,16 +21,14 @@ var ErrRateLimitExceeded = errors.New("fatal API error (rate limit or forbidden)
 type Client struct {
 	baseURL string
 	client  *http.Client
+	limiter *rate.Limiter
 }
 
 func NewClient(baseURL string, client *http.Client) *Client {
-	if client == nil {
-		client = http.DefaultClient
-	}
-
 	return &Client{
 		baseURL: baseURL,
 		client:  client,
+		limiter: rate.NewLimiter(15, 15),
 	}
 }
 
@@ -77,6 +77,11 @@ func (c *Client) DownloadImage(ctx context.Context, url string, dest string) err
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create Image request: %w", err)
+	}
+
+	err = c.limiter.Wait(ctx)
+	if err != nil {
+		return fmt.Errorf("rate limiter blocked request: %w", err)
 	}
 
 	resp, err := c.client.Do(req)

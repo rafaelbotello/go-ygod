@@ -37,7 +37,7 @@ func main() {
 
 	log.Printf("Starting download of %d images...", len(urls))
 
-	err = client.DownloadAllImages(ctx, urls, "images/", 4)
+	err = client.DownloadAllImages(ctx, urls, "images/", 20)
 	if err != nil {
 		if errors.Is(err, ygoapi.ErrRateLimitExceeded) {
 			log.Fatalf("Factory shut down early due to API Rate Limiting: %v", err)
