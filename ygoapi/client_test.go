@@ -240,8 +240,6 @@ func TestDownloadAllImages_RateLimitCancellation(t *testing.T) {
 	if finalCount > 10 {
 		t.Fatalf("Cancellation took too long! Server was hit %d times", finalCount)
 	}
-
-	t.Logf("Success! The panic button worked. Workers stopped after only %d requests instead of 50.", finalCount)
 }
 
 func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
@@ -268,8 +266,6 @@ func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
 	if elapsed < 1500*time.Millisecond {
 		t.Fatalf("Rate limiter failed downloaded 45 images way too fast: %v", elapsed)
 	}
-
-	t.Logf("Success: rate limiter properly paced 45 requests over %v", elapsed)
 }
 
 func TestDownloadAllImages_LogsFailedDownloads(t *testing.T) {
@@ -299,6 +295,4 @@ func TestDownloadAllImages_LogsFailedDownloads(t *testing.T) {
 	require.Contains(t, outputString, "missing_card_1.jpg")
 	require.Contains(t, outputString, "missing_card_2.jpg")
 	require.Contains(t, outputString, "404")
-
-	t.Logf("Success! The logger successfully captured the 404s:\n%s", outputString)
 }

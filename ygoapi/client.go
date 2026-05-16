@@ -29,6 +29,7 @@ type Client struct {
 	limiter *rate.Limiter
 }
 
+// NewClient initializes a new ygoapi Client with a default rate limiter.
 func NewClient(baseURL string, client *http.Client) *Client {
 	return &Client{
 		baseURL: baseURL,
@@ -52,6 +53,7 @@ type GetCardsResponse struct {
 	Data []Card `json:"data"`
 }
 
+// GetCards fetches the master list of all Yu-Gi-Oh! cards from the API.
 func (c *Client) GetCards(ctx context.Context) (*GetCardsResponse, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL, nil)
@@ -77,9 +79,10 @@ func (c *Client) GetCards(ctx context.Context) (*GetCardsResponse, error) {
 	return &response, nil
 }
 
-func (c *Client) DownloadImage(ctx context.Context, url string, dest string) error {
+// DownloadImage downloads an image from the given URL and saves it to the destination path.
+func (c *Client) DownloadImage(ctx context.Context, url string, destPath string) error {
 
-	if _, err := os.Stat(dest); err == nil {
+	if _, err := os.Stat(destPath); err == nil {
 		return nil
 	}
 
@@ -142,14 +145,14 @@ func (c *Client) DownloadImage(ctx context.Context, url string, dest string) err
 		}
 	}()
 
-	out, err := os.Create(dest)
+	out, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("failed to create file : %w", err)
 	}
 	defer func() {
 		out.Close()
 		if err != nil {
-			os.Remove(dest)
+			os.Remove(destPath)
 		}
 	}()
 
