@@ -100,7 +100,7 @@ func (c *Client) DownloadImage(ctx context.Context, url string, dest string) err
 
 		resp, err = c.client.Do(req)
 		if err != nil {
-			return fmt.Errorf("error fetching image: %v", err)
+			lastErr = fmt.Errorf("error fetching image: %v", err)
 		} else {
 			switch resp.StatusCode {
 			case http.StatusOK:

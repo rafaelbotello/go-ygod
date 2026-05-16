@@ -1,8 +1,10 @@
 package ygoapi_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -197,7 +199,7 @@ func TestDownloadAllImages(t *testing.T) {
 		mockServer.URL + "/card4.jpg",
 	}
 
-	client.DownloadAllImages(t.Context(), urls, destDir, 15, nil)
+	client.DownloadAllImages(t.Context(), urls, destDir, 15, nil, nil)
 
 	files, err := os.ReadDir(destDir)
 	if err != nil {
@@ -227,7 +229,7 @@ func TestDownloadAllImages_RateLimitCancellation(t *testing.T) {
 		urls = append(urls, fmt.Sprintf("%s/test_%d.jpg", server.URL, i))
 	}
 
-	client.DownloadAllImages(t.Context(), urls, destDir, 4, nil)
+	client.DownloadAllImages(t.Context(), urls, destDir, 4, nil, nil)
 
 	finalCount := atomic.LoadInt32(&requestCount)
 
@@ -258,7 +260,7 @@ func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
 
 	startTime := time.Now()
 
-	err := client.DownloadAllImages(t.Context(), urls, destDir, 20, nil)
+	err := client.DownloadAllImages(t.Context(), urls, destDir, 20, nil, nil)
 	require.NoError(t, err)
 
 	elapsed := time.Since(startTime)
@@ -268,4 +270,35 @@ func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
 	}
 
 	t.Logf("Success: rate limiter properly paced 45 requests over %v", elapsed)
+}
+
+func TestDownloadAllImages_LogsFailedDownloads(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := ygoapi.NewClient(server.URL, server.Client())
+	destDir := t.TempDir()
+
+	var logOutput bytes.Buffer
+	testLogger := log.New(&logOutput, "", 0)
+
+	urls := []string{
+		server.URL + "/missing_card_1.jpg",
+		server.URL + "/missing_card_2.jpg",
+	}
+
+	err := client.DownloadAllImages(t.Context(), urls, destDir, 2, nil, testLogger)
+
+	require.NoError(t, err)
+
+	outputString := logOutput.String()
+
+	require.Contains(t, outputString, "FAILED")
+	require.Contains(t, outputString, "missing_card_1.jpg")
+	require.Contains(t, outputString, "missing_card_2.jpg")
+	require.Contains(t, outputString, "404")
+
+	t.Logf("Success! The logger successfully captured the 404s:\n%s", outputString)
 }

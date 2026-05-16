@@ -2,12 +2,13 @@ package ygoapi
 
 import (
 	"context"
+	"log"
 
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) DownloadAllImages(ctx context.Context, urls []string, destDir string, workerCount int, bar *progressbar.ProgressBar) error {
+func (c *Client) DownloadAllImages(ctx context.Context, urls []string, destDir string, workerCount int, bar *progressbar.ProgressBar, errorLogger *log.Logger) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -29,7 +30,7 @@ func (c *Client) DownloadAllImages(ctx context.Context, urls []string, destDir s
 
 	for range workerCount {
 		g.Go(func() error {
-			return c.worker(ctx, jobs, destDir, bar)
+			return c.worker(ctx, jobs, destDir, bar, errorLogger)
 		})
 	}
 
