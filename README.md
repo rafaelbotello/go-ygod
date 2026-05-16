@@ -35,8 +35,8 @@ go-ygod/
 ├── .gitignore
 ├── go.mod
 └── README.md
-
---Installation & Usage
+```
+## Installation & Usage
 
 Ensure you have Go 1.22+ installed on your machine.
 
@@ -55,12 +55,12 @@ Bash
 go run cmd/ygod/main.go
 Note: To safely pause the download at any time, press Ctrl+C. The application will finish writing active files and exit gracefully.
 
---Testing
+## Testing
 
 The ygoapi package includes a robust suite of unit tests. It utilizes net/http/httptest to mock server responses, thoroughly testing rate limiter pacing, context cancellation, and error handling without hitting the live API.
 
 Bash
 go test ./ygoapi/ -v
 
---Disclaimer & API Usage
+## Disclaimer & API Usage
 This tool is designed to strictly adhere to the YGOPRODeck API guidelines (maximum 15 requests per second). Please be a good internet citizen and do not modify the token bucket rate limiter to aggressively spam the API.
