@@ -1,1 +1,8 @@
+# Ignore downloaded images
 images/
+
+# Ignore log files
+failed_images.txt
+
+# Ignore compiled binaries
+ygod.exe
