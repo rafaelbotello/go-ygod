@@ -5,9 +5,11 @@ import (
 	"errors"
 	"log"
 	"path/filepath"
+
+	"github.com/schollz/progressbar/v3"
 )
 
-func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string) error {
+func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string, bar *progressbar.ProgressBar) error {
 
 	for {
 		select {
@@ -22,6 +24,11 @@ func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string) er
 			destPath := filepath.Join(dest, fileName)
 
 			err := c.DownloadImage(ctx, job, destPath)
+
+			if bar != nil {
+				bar.Add(1)
+			}
+
 			if err != nil {
 				if errors.Is(err, ErrRateLimitExceeded) {
 					return err

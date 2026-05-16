@@ -197,7 +197,7 @@ func TestDownloadAllImages(t *testing.T) {
 		mockServer.URL + "/card4.jpg",
 	}
 
-	client.DownloadAllImages(t.Context(), urls, destDir, 15)
+	client.DownloadAllImages(t.Context(), urls, destDir, 15, nil)
 
 	files, err := os.ReadDir(destDir)
 	if err != nil {
@@ -227,7 +227,7 @@ func TestDownloadAllImages_RateLimitCancellation(t *testing.T) {
 		urls = append(urls, fmt.Sprintf("%s/test_%d.jpg", server.URL, i))
 	}
 
-	client.DownloadAllImages(t.Context(), urls, destDir, 4)
+	client.DownloadAllImages(t.Context(), urls, destDir, 4, nil)
 
 	finalCount := atomic.LoadInt32(&requestCount)
 
@@ -258,7 +258,7 @@ func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
 
 	startTime := time.Now()
 
-	err := client.DownloadAllImages(t.Context(), urls, destDir, 20)
+	err := client.DownloadAllImages(t.Context(), urls, destDir, 20, nil)
 	require.NoError(t, err)
 
 	elapsed := time.Since(startTime)

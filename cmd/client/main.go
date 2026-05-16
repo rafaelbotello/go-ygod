@@ -6,14 +6,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
+	"os/signal"
 
 	"github.com/rafaelbotello/go-ygod/ygoapi"
+	"github.com/schollz/progressbar/v3"
 )
 
 func main() {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
 	client := ygoapi.NewClient(ygoapi.BaseURL, http.DefaultClient)
@@ -36,8 +37,9 @@ func main() {
 	}
 
 	log.Printf("Starting download of %d images...", len(urls))
+	bar := progressbar.Default(int64(len(urls)), "Downloading Cards")
 
-	err = client.DownloadAllImages(ctx, urls, "images/", 20)
+	err = client.DownloadAllImages(ctx, urls, "images/", 20, bar)
 	if err != nil {
 		if errors.Is(err, ygoapi.ErrRateLimitExceeded) {
 			log.Fatalf("Factory shut down early due to API Rate Limiting: %v", err)
