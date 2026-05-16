@@ -8,8 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"math"
+	"math/rand/v2"
 	"net/http"
 	"os"
+	"path/filepath"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -74,37 +79,82 @@ func (c *Client) GetCards(ctx context.Context) (*GetCardsResponse, error) {
 
 func (c *Client) DownloadImage(ctx context.Context, url string, dest string) error {
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create Image request: %w", err)
+	if _, err := os.Stat(dest); err == nil {
+		return nil
 	}
 
-	err = c.limiter.Wait(ctx)
-	if err != nil {
-		return fmt.Errorf("rate limiter blocked request: %w", err)
+	const maxRetries = 3
+	var resp *http.Response
+	var lastErr error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create Image request: %w", err)
+		}
+
+		err = c.limiter.Wait(ctx)
+		if err != nil {
+			return fmt.Errorf("rate limiter blocked request: %w", err)
+		}
+
+		resp, err = c.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("error fetching image: %v", err)
+		} else {
+			switch resp.StatusCode {
+			case http.StatusOK:
+				lastErr = nil
+			case http.StatusTooManyRequests:
+				resp.Body.Close()
+				return ErrRateLimitExceeded
+			case http.StatusNotFound:
+				resp.Body.Close()
+				return fmt.Errorf("image not found 404: %s", url)
+			default:
+				resp.Body.Close()
+				lastErr = fmt.Errorf("unexpected status %d", resp.StatusCode)
+			}
+		}
+
+		if lastErr == nil {
+			break
+		}
+
+		if attempt < maxRetries {
+			delay := time.Duration(math.Pow(2, float64(attempt))*500)*time.Millisecond + time.Duration(rand.IntN(200))*time.Millisecond
+			log.Printf("network hiccup for %s, retrying in %v attempt: %d/%d", filepath.Base(url), delay, attempt+1, maxRetries)
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+			}
+		}
 	}
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("error fetching image: %v", err)
+	if lastErr != nil {
+		return fmt.Errorf("failed after %d attempts : %w", maxRetries, lastErr)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("%w: received status %d", ErrRateLimitExceeded, resp.StatusCode)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+	}()
 
 	out, err := os.Create(dest)
 	if err != nil {
-		return fmt.Errorf("failed to save Image: %w", err)
+		return fmt.Errorf("failed to create file : %w", err)
 	}
-	defer out.Close()
+	defer func() {
+		out.Close()
+		if err != nil {
+			os.Remove(dest)
+		}
+	}()
 
-	if _, err := io.Copy(out, resp.Body); err != nil {
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
 		return fmt.Errorf("failed to save image data: %w", err)
 	}
 

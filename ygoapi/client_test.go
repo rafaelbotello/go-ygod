@@ -2,6 +2,7 @@ package ygoapi_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -175,7 +176,6 @@ func TestDownloadImage(t *testing.T) {
 
 		require.Error(t, err)
 		require.ErrorIs(t, err, ygoapi.ErrRateLimitExceeded)
-		require.Contains(t, err.Error(), "429")
 	})
 }
 
@@ -213,19 +213,18 @@ func TestDownloadAllImages(t *testing.T) {
 func TestDownloadAllImages_RateLimitCancellation(t *testing.T) {
 
 	var requestCount int32
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&requestCount, 1)
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
-	defer mockServer.Close()
+	defer server.Close()
 
-	client := ygoapi.NewClient(mockServer.URL, mockServer.Client())
+	client := ygoapi.NewClient(server.URL, server.Client())
 	destDir := t.TempDir()
 
 	var urls []string
-
-	for range 50 {
-		urls = append(urls, mockServer.URL+"/card.jpg")
+	for i := 0; i < 45; i++ {
+		urls = append(urls, fmt.Sprintf("%s/test_%d.jpg", server.URL, i))
 	}
 
 	client.DownloadAllImages(t.Context(), urls, destDir, 4)
@@ -253,8 +252,8 @@ func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
 	destDir := t.TempDir()
 
 	var urls []string
-	for range 45 {
-		urls = append(urls, server.URL+"/test.jpg")
+	for i := 0; i < 45; i++ {
+		urls = append(urls, fmt.Sprintf("%s/test_%d.jpg", server.URL, i))
 	}
 
 	startTime := time.Now()
