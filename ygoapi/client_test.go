@@ -1,10 +1,9 @@
 package ygoapi_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,7 +45,7 @@ func TestGetCards(t *testing.T) {
 		)
 		defer server.Close()
 
-		client := ygoapi.NewClient(server.URL, server.Client())
+		client := ygoapi.NewClient(server.URL, server.Client(), nil)
 
 		response, err := client.GetCards(t.Context())
 
@@ -61,7 +60,7 @@ func TestGetCards(t *testing.T) {
 		)
 		defer server.Close()
 
-		client := ygoapi.NewClient(server.URL, server.Client())
+		client := ygoapi.NewClient(server.URL, server.Client(), nil)
 
 		_, err := client.GetCards(t.Context())
 
@@ -76,7 +75,7 @@ func TestGetCards(t *testing.T) {
 		)
 		defer server.Close()
 
-		client := ygoapi.NewClient(server.URL, server.Client())
+		client := ygoapi.NewClient(server.URL, server.Client(), nil)
 
 		_, err := client.GetCards(t.Context())
 
@@ -94,7 +93,7 @@ func TestGetCards(t *testing.T) {
 		)
 		defer server.Close()
 
-		client := ygoapi.NewClient(server.URL, server.Client())
+		client := ygoapi.NewClient(server.URL, server.Client(), nil)
 
 		_, err := client.GetCards(t.Context())
 
@@ -118,7 +117,7 @@ func TestDownloadImage(t *testing.T) {
 		)
 		defer server.Close()
 
-		client := ygoapi.NewClient(server.URL, server.Client())
+		client := ygoapi.NewClient(server.URL, server.Client(), nil)
 
 		destPath := filepath.Join(
 			t.TempDir(),
@@ -147,7 +146,7 @@ func TestDownloadImage(t *testing.T) {
 		)
 		defer server.Close()
 
-		client := ygoapi.NewClient(server.URL, server.Client())
+		client := ygoapi.NewClient(server.URL, server.Client(), nil)
 
 		destPath := filepath.Join(t.TempDir(), "fail_card.jpg")
 
@@ -170,7 +169,7 @@ func TestDownloadImage(t *testing.T) {
 		)
 		defer server.Close()
 
-		client := ygoapi.NewClient(server.URL, server.Client())
+		client := ygoapi.NewClient(server.URL, server.Client(), nil)
 
 		destPath := filepath.Join(t.TempDir(), "fail_card.jpg")
 
@@ -189,7 +188,7 @@ func TestDownloadAllImages(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	client := ygoapi.NewClient(mockServer.URL, mockServer.Client())
+	client := ygoapi.NewClient(mockServer.URL, mockServer.Client(), nil)
 	destDir := t.TempDir()
 
 	urls := []string{
@@ -221,7 +220,7 @@ func TestDownloadAllImages_RateLimitCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := ygoapi.NewClient(server.URL, server.Client())
+	client := ygoapi.NewClient(server.URL, server.Client(), nil)
 	destDir := t.TempDir()
 
 	var urls []string
@@ -248,7 +247,7 @@ func TestDownloadAllImages_RateLimiterPacing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := ygoapi.NewClient(server.URL, server.Client())
+	client := ygoapi.NewClient(server.URL, server.Client(), nil)
 	destDir := t.TempDir()
 
 	var urls []string
@@ -274,24 +273,33 @@ func TestDownloadAllImages_LogsFailedDownloads(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := ygoapi.NewClient(server.URL, server.Client())
+	client := ygoapi.NewClient(server.URL, server.Client(), nil)
 	destDir := t.TempDir()
 
-	var logOutput bytes.Buffer
-	testLogger := log.New(&logOutput, "", 0)
+	logFile, err := os.Create("test_failed_images.log")
+	require.NoError(t, err)
+
+	defer os.Remove(logFile.Name())
+	defer logFile.Close()
+
+	jsonHandler := slog.NewJSONHandler(logFile, nil)
+	testLogger := slog.New(jsonHandler)
 
 	urls := []string{
 		server.URL + "/missing_card_1.jpg",
 		server.URL + "/missing_card_2.jpg",
 	}
 
-	err := client.DownloadAllImages(t.Context(), urls, destDir, 2, nil, testLogger)
-
+	err = client.DownloadAllImages(t.Context(), urls, destDir, 2, nil, testLogger)
 	require.NoError(t, err)
 
-	outputString := logOutput.String()
+	logFile.Sync()
+	logBytes, err := os.ReadFile(logFile.Name())
+	require.NoError(t, err)
 
-	require.Contains(t, outputString, "FAILED")
+	outputString := string(logBytes)
+
+	require.Contains(t, outputString, `"msg":"failed"`)
 	require.Contains(t, outputString, "missing_card_1.jpg")
 	require.Contains(t, outputString, "missing_card_2.jpg")
 	require.Contains(t, outputString, "404")

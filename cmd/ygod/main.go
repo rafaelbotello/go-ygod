@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,20 +14,25 @@ import (
 
 func main() {
 
+	textLogger := slog.NewTextHandler(os.Stdout, nil)
+	slog.SetDefault(slog.New(textLogger))
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	client := ygoapi.NewClient(ygoapi.BaseURL, http.DefaultClient)
-	log.Println("Fetching card data from YGOAPI...")
+	client := ygoapi.NewClient(ygoapi.BaseURL, http.DefaultClient, slog.Default())
+	slog.Info("Fetching card data from YGOAPI...")
 
 	response, err := client.GetCards(ctx)
 	if err != nil {
-		log.Fatalf("Fatal error fetching cards: %v", err)
+		slog.Error("Fatal error fetching cards", "error", err)
+		os.Exit(1)
 	}
 
 	err = os.MkdirAll("images/", 0755)
 	if err != nil {
-		log.Fatalf("Failed to create directory: %v", err)
+		slog.Error("Failed to create directory", "error", err)
+		os.Exit(1)
 	}
 
 	var urls []string
@@ -38,23 +43,28 @@ func main() {
 
 	errorFile, err := os.OpenFile("failed_images.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatalf("Failed to open error log file: %v", err)
+		slog.Error("Failed to open error log file", "error", err)
+		os.Exit(1)
 	}
 	defer errorFile.Close()
 
-	errorLogger := log.New(errorFile, "", log.Ldate|log.Ltime)
+	jsonFileHandler := slog.NewJSONHandler(errorFile, nil)
+	errorLogger := slog.New(jsonFileHandler)
 
-	log.Printf("Starting download of %d images...", len(urls))
+	slog.Info("Starting download", "total_images", len(urls))
 	bar := progressbar.Default(int64(len(urls)), "Downloading Cards")
 
 	err = client.DownloadAllImages(ctx, urls, "images/", 20, bar, errorLogger)
 	if err != nil {
+		errorFile.Close()
 		if errors.Is(err, ygoapi.ErrRateLimitExceeded) {
-			log.Fatalf("Factory shut down early due to API Rate Limiting: %v", err)
+			slog.Error("Factory shut down early due to API Rate Limiting", "error", err)
+			os.Exit(1)
 		}
-		log.Fatalf("Factory shut down with error: %v", err)
+		slog.Error("Factory shut down with error", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("All downloads complete! The factory is closed.")
+	slog.Info("All downloads complete! The factory is closed.")
 
 }

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"math/rand/v2"
 	"net/http"
@@ -27,14 +27,19 @@ type Client struct {
 	baseURL string
 	client  *http.Client
 	limiter *rate.Limiter
+	logger  *slog.Logger
 }
 
 // NewClient initializes a new ygoapi Client with a default rate limiter.
-func NewClient(baseURL string, client *http.Client) *Client {
+func NewClient(baseURL string, client *http.Client, logger *slog.Logger) *Client {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	return &Client{
 		baseURL: baseURL,
 		client:  client,
 		limiter: rate.NewLimiter(15, 15),
+		logger:  logger,
 	}
 }
 
@@ -126,7 +131,12 @@ func (c *Client) DownloadImage(ctx context.Context, url string, destPath string)
 
 		if attempt < maxRetries {
 			delay := time.Duration(math.Pow(2, float64(attempt))*500)*time.Millisecond + time.Duration(rand.IntN(200))*time.Millisecond
-			log.Printf("network hiccup for %s, retrying in %v attempt: %d/%d", filepath.Base(url), delay, attempt+1, maxRetries)
+			c.logger.Debug("network hiccup, retrying...",
+				"file", filepath.Base(url),
+				"delay", delay.String(),
+				"attempt", attempt+1,
+				"max_retries", maxRetries,
+			)
 
 			select {
 			case <-ctx.Done():

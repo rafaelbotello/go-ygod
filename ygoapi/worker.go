@@ -3,13 +3,13 @@ package ygoapi
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/schollz/progressbar/v3"
 )
 
-func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string, bar *progressbar.ProgressBar, errorLogger *log.Logger) error {
+func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string, bar *progressbar.ProgressBar, errorLogger *slog.Logger) error {
 
 	for {
 		select {
@@ -33,9 +33,8 @@ func (c *Client) worker(ctx context.Context, jobs <-chan string, dest string, ba
 				if errors.Is(err, ErrRateLimitExceeded) {
 					return err
 				} else {
-					// Write safely to the file instead of the terminal!
 					if errorLogger != nil {
-						errorLogger.Printf("FAILED %s: %v\n", fileName, err)
+						errorLogger.Error("failed", "url", job, "error", err)
 					}
 				}
 			}

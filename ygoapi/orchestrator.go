@@ -2,13 +2,13 @@ package ygoapi
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/sync/errgroup"
 )
 
-func (c *Client) DownloadAllImages(ctx context.Context, urls []string, destDir string, workerCount int, bar *progressbar.ProgressBar, errorLogger *log.Logger) error {
+func (c *Client) DownloadAllImages(ctx context.Context, urls []string, destDir string, workerCount int, bar *progressbar.ProgressBar, errorLogger *slog.Logger) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
